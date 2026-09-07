@@ -2,7 +2,6 @@
 
 import os
 import secrets
-import threading
 from datetime import datetime
 
 from fastapi import FastAPI, Request, Response

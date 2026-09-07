@@ -39,8 +39,10 @@ def _serverchan(s, title, content):
     key = _cfg(s, 'serverchan', 'sendkey')
     if not key:
         return False, 'Server酱 配置不完整'
-    if key.startswith('sctp'):
-        url = f'https://{key.split("sctp")[1].split("t")[0] if False else "sctapi.ftqq.com"}/{key}.send'
+    # sctp 开头的 key 需要带服务器号，例如 sctp1234tXXXX
+    if key.startswith('sctp') and 't' in key[4:]:
+        server_no = key[4:].split('t')[0]
+        url = f'https://{server_no}.push.ft07.com/send/{key}.send'
     else:
         url = f'https://sctapi.ftqq.com/{key}.send'
     r = requests.post(url, data={'title': title, 'desp': content}, timeout=15)
