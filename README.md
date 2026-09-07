@@ -58,6 +58,25 @@ MCLD_DATA_DIR=./data python -m app
 
 ---
 
+## 🏷 版本与更新
+
+面板**标题栏会显示当前版本号**（如 `v1.2.0`），点一下即可进入「关于 / 更新」页，那里有：
+
+- 面板版本 / 核心脚本版本 / 发布日期
+- **一键检查更新**：对比 GitHub 最新版本，有新版会显示 Release 说明和更新命令
+- 完整更新日志
+
+镜像 tag 与版本号一一对应，方便锁定版本：
+
+```bash
+docker pull tianjian518/mcloud-ai-bean:1.2.0    # 锁定版本
+docker pull tianjian518/mcloud-ai-bean:latest   # 跟踪最新
+```
+
+Release 页面：https://github.com/tianjian518/mcloud-ai-bean/releases
+
+---
+
 ## 🔑 获取账号凭据（Authorization）
 
 1. 手机安装移动云盘 App，用中国移动号码登录；
