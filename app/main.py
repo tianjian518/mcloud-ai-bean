@@ -1,7 +1,11 @@
 """移动云盘 AI 豆自动化 —— Web 面板服务。"""
 
+import json as _json
 import os
+import re
 import secrets
+import urllib.error
+import urllib.request
 from datetime import datetime
 
 from fastapi import FastAPI, Request, Response
@@ -11,11 +15,13 @@ from fastapi.staticfiles import StaticFiles
 from . import db, notifier, runner, scheduler
 from .config import NOTIFY_FIELDS, WEB_HOST, WEB_PORT
 from .core import yunpan
+from .version import (CHANGELOG, COMMIT_URL, DOCKER_IMAGE, PANEL_RELEASED,
+                      PANEL_VERSION, RELEASE_URL, REPO)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
-app = FastAPI(title='移动云盘 AI 豆助手', version='1.0.0')
+app = FastAPI(title='移动云盘 AI 豆助手', version=PANEL_VERSION)
 
 # 会话令牌（进程内保存，重启后需重新登录）
 _sessions = set()
@@ -72,8 +78,9 @@ async def state(request: Request):
     next_run = scheduler.next_run()
     return {
         'ok': True,
-        'version': '1.0.0',
+        'version': PANEL_VERSION,
         'core_version': yunpan.SCRIPT_VERSION,
+        'released': PANEL_RELEASED,
         'boot_time': _boot,
         'stats': db.stats(),
         'accounts': db.list_accounts(),
@@ -255,10 +262,71 @@ async def notify_test(request: Request):
     return {'ok': True, 'results': [{'channel': c, 'ok': o, 'msg': m} for c, o, m in results]}
 
 
+def _ver_tuple(version):
+    parts = re.split(r'[.\-+]', (version or '').lstrip('v'))
+    nums = []
+    for part in parts[:3]:
+        nums.append(int(part) if part.isdigit() else 0)
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums)
+
+
+def _cmp_version(a, b):
+    ta, tb = _ver_tuple(a), _ver_tuple(b)
+    return (ta > tb) - (ta < tb)
+
+
+@app.get('/api/check-update')
+async def check_update(request: Request):
+    """检查 GitHub 上的最新版本"""
+    if not _authorized(request):
+        return _need_auth()
+    result = {
+        'ok': True,
+        'current': PANEL_VERSION,
+        'released': PANEL_RELEASED,
+        'latest': '',
+        'has_update': False,
+        'checked': False,
+        'notes': '',
+        'published': '',
+        'url': RELEASE_URL,
+        'commits': COMMIT_URL,
+        'image': DOCKER_IMAGE,
+        'changelog': CHANGELOG,
+        'msg': '',
+    }
+    try:
+        req = urllib.request.Request(
+            f'https://api.github.com/repos/{REPO}/releases/latest',
+            headers={'User-Agent': 'mcloud-ai-bean', 'Accept': 'application/vnd.github+json'},
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = _json.loads(resp.read().decode('utf-8'))
+        tag = (data.get('tag_name') or '').lstrip('v')
+        result['checked'] = True
+        result['latest'] = tag or PANEL_VERSION
+        result['notes'] = (data.get('body') or '')[:800]
+        result['published'] = data.get('published_at', '')
+        result['has_update'] = bool(tag) and _cmp_version(tag, PANEL_VERSION) > 0
+        if not result['has_update']:
+            result['msg'] = '当前已是最新版本'
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            result['msg'] = '仓库暂未发布 Release，当前已是最新版本'
+        else:
+            result['msg'] = f'GitHub 返回 HTTP {e.code}，可手动访问 Release 页面查看'
+    except Exception as e:
+        result['msg'] = f'无法连接 GitHub（{type(e).__name__}），可手动访问 Release 页面查看'
+    return result
+
+
 @app.get('/api/version')
 async def version():
     """无需登录：返回最新版本信息（供面板检查更新）"""
-    return {'ok': True, 'version': '1.0.0', 'core': yunpan.SCRIPT_VERSION}
+    return {'ok': True, 'version': PANEL_VERSION, 'core': yunpan.SCRIPT_VERSION,
+            'released': PANEL_RELEASED, 'image': DOCKER_IMAGE}
 
 
 # ---------------------------------------------------------------- 启动

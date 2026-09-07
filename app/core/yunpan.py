@@ -2011,7 +2011,7 @@ class YP:
                         prize_name = draw_data["result"].get("prizeName", "")
                         self.log("✅抽奖成功，获得:" + prize_name)
                     else:
-                        print("❌抽奖失败")
+                        self.log(f"❌抽奖失败: code={draw_data.get('code')} {draw_data.get('msg', '未知原因')}")
             else:
                 pass
         else:
@@ -2058,11 +2058,15 @@ class YP:
         else:
             print("-获取游戏信息失败")
 
-    def receive_cloud_once(self):
-        """调用一次领取云朵接口"""
+    def receive_cloud_once(self, method='POST'):
+        """调用一次领取云朵接口
+
+        接口只接受 POST，用 GET 会返回 405 {"code":502,"msg":"请求方法异常"}
+        """
         return self.request_market_json(f'{self.market_base_url}/ycloud/signin/page/receiveV3',
                                         params={'client': 'app'},
-                                        headers=self.build_receive_headers())
+                                        headers=self.build_receive_headers(),
+                                        method=method, json_body=True, data={})
 
     def diagnose_receive(self):
         """领取失败时打印真实 HTTP 状态码，便于定位（如 401/403/405/参数错误）"""
@@ -2071,14 +2075,20 @@ class YP:
             'showLoading': 'true',
             'appVersion': f'{self.client_version}.0',
             'activityId': 'sign_in_3',
+            'Content-Type': 'application/json;charset=UTF-8',
         }, referer=self.build_market_page_url())
-        try:
-            resp = self.session.get(url, params={'client': 'app'}, headers=headers,
-                                    cookies=dict(self.market_cookies) or None, timeout=20)
-            body = (resp.text or '').replace('\n', ' ')[:200]
-            self.log(f'-领取诊断: HTTP {resp.status_code} {body}')
-        except Exception as e:
-            self.log(f'-领取诊断异常: {e}')
+        for method in ('POST', 'GET'):
+            try:
+                if method == 'POST':
+                    resp = self.session.post(url, params={'client': 'app'}, headers=headers,
+                                             json={}, cookies=dict(self.market_cookies) or None, timeout=20)
+                else:
+                    resp = self.session.get(url, params={'client': 'app'}, headers=headers,
+                                            cookies=dict(self.market_cookies) or None, timeout=20)
+                body = (resp.text or '').replace('\n', ' ')[:200]
+                self.log(f'-领取诊断[{method}]: HTTP {resp.status_code} {body}')
+            except Exception as e:
+                self.log(f'-领取诊断异常[{method}]: {e}')
 
     def recheck_pending(self, pending_amount, total_amount):
         """重新查询云朵信息，对比出实际领取到的数量"""
@@ -2108,12 +2118,12 @@ class YP:
         total_amount = info_result.get('total', '')
         if pending_amount:
             self.prepare_signin_center_session(for_receive=True)
-            receive_data = self.receive_cloud_once()
+            receive_data = self.receive_cloud_once('POST')
             if receive_data is None:
-                # 接口无响应时先做一次诊断，把真实状态码打进日志，再重试一次
+                # 接口无响应时先做一次诊断，把真实状态码打进日志，再用另一种方法重试
                 self.diagnose_receive()
                 self.sleep(2, 4)
-                receive_data = self.receive_cloud_once()
+                receive_data = self.receive_cloud_once('GET') or self.receive_cloud_once('POST')
             if receive_data is None:
                 claimed, latest_total, latest_pending = self.recheck_pending(pending_amount, total_amount)
                 if claimed > 0:
@@ -2270,7 +2280,14 @@ class YP:
             except Exception as e:
                 self.log(f'红包派对登录异常: {e}')
         if login_data is None:
-            self.log(f'红包派对登录失败: HTTP {last_status}，请求已记录')
+            if last_status == 404:
+                self.log('红包派对接口返回 404：活动已下线或路径变更，本次跳过（不影响其他任务）')
+            elif last_status == 418:
+                self.log('红包派对被风控拦截（HTTP 418）：建议降低执行频率后重试')
+            elif last_status == 0:
+                self.log('红包派对登录失败: 网络不通')
+            else:
+                self.log(f'红包派对登录失败: HTTP {last_status}')
             return False
         if not login_data:
             self.log('红包派对登录失败: 接口无响应')

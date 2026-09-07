@@ -41,6 +41,8 @@ header{border-bottom:1px solid var(--line);background:var(--bg2);padding:14px 24
 .pill{padding:4px 11px;border-radius:999px;font-size:12px;background:#1f2630;color:var(--txt2);border:1px solid var(--line)}
 .pill.ok{color:var(--ok);border-color:#1d4429;background:#12261a}
 .pill.warn{color:var(--warn);border-color:#4a3a12;background:#251d0d}
+.pill.ver{cursor:pointer;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent);border-color:#1f3a5f;background:#0f1f33}
+.pill.ver:hover{filter:brightness(1.3)}
 
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);background:var(--bg2);padding:0 24px;position:sticky;top:57px;z-index:19;overflow-x:auto}
 .tab{padding:11px 18px;font-size:14px;color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
@@ -108,7 +110,8 @@ pre.log{background:#0d1117;border:1px solid var(--line);border-radius:10px;paddi
 </div>
 
 <header>
-  <div class="logo"><span class="dot" id="dot"></span>移动云盘 AI 豆助手</div>
+  <div class="logo"><span class="dot" id="dot"></span>移动云盘 AI 豆助手
+    <span class="pill ver" id="pillVer" onclick="tab('about')" title="点击查看版本详情">v-</span></div>
   <span class="pill" id="pillStatus">就绪</span>
   <span class="pill" id="pillCron">未设置定时</span>
   <span class="pill" id="pillNext"></span>
@@ -125,6 +128,7 @@ pre.log{background:#0d1117;border:1px solid var(--line);border-radius:10px;paddi
   <div class="tab" data-t="live" onclick="tab('live')">实时日志</div>
   <div class="tab" data-t="hist" onclick="tab('hist')">历史记录</div>
   <div class="tab" data-t="set" onclick="tab('set')">系统设置</div>
+  <div class="tab" data-t="about" onclick="tab('about')">关于 / 更新</div>
 </div>
 
 <main>
@@ -194,6 +198,48 @@ pre.log{background:#0d1117;border:1px solid var(--line);border-radius:10px;paddi
         <tbody id="histBody"></tbody>
       </table></div>
       <div class="empty hidden" id="histEmpty">暂无记录</div>
+    </section>
+  </div>
+
+  <!-- 关于 / 更新 -->
+  <div id="t-about" class="hidden">
+    <section>
+      <h2>ℹ️ 版本信息</h2>
+      <div class="grid2" style="margin-bottom:16px">
+        <div class="card"><div class="k">面板版本</div><div class="v" id="abVer" style="font-size:22px">-</div>
+          <div class="hint" id="abDate" style="margin-top:6px"></div></div>
+        <div class="card"><div class="k">核心脚本版本</div><div class="v" id="abCore" style="font-size:22px">-</div>
+          <div class="hint" style="margin-top:6px">移动云盘自动签到 (yaohuo & xiaohai)</div></div>
+      </div>
+      <div class="row" style="margin-bottom:14px">
+        <button onclick="checkUpdate()">🔄 检查更新</button>
+        <span class="pill" id="abMsg">未检查</span>
+      </div>
+      <div id="abUpdate" class="hidden" style="border:1px solid var(--ok);border-radius:10px;padding:14px;background:#12261a;margin-bottom:16px">
+        <div style="font-weight:600;margin-bottom:8px;color:var(--ok)" id="abNewTitle"></div>
+        <div style="font-size:12px;color:var(--txt2);margin-bottom:10px" id="abNewDate"></div>
+        <pre class="log" id="abNotes" style="max-height:220px;background:#0d1117"></pre>
+        <div class="hint" style="margin-top:10px">更新命令：</div>
+        <pre class="log" style="max-height:70px;background:#0d1117">docker compose pull &amp;&amp; docker compose up -d</pre>
+      </div>
+      <div class="field">
+        <label>当前镜像</label>
+        <div class="mono" style="font-size:13px;color:var(--txt2)" id="abImage">-</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>📜 更新日志</h2>
+      <div id="abLog"></div>
+    </section>
+
+    <section>
+      <h2>🔗 相关链接</h2>
+      <div class="row">
+        <a href="https://github.com/tianjian518/mcloud-ai-bean" target="_blank">GitHub 仓库</a>
+        <a href="https://github.com/tianjian518/mcloud-ai-bean/releases/latest" target="_blank">Release 页面</a>
+        <a href="https://hub.docker.com/r/tianjian518/mcloud-ai-bean" target="_blank">Docker Hub</a>
+      </div>
     </section>
   </div>
 
@@ -267,12 +313,13 @@ function showLogin(){
 function tab(name){
   CUR=name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.t===name));
-  ['dash','acct','live','hist','set'].forEach(n=>{
+  ['dash','acct','live','hist','set','about'].forEach(n=>{
     document.getElementById('t-'+n).classList.toggle('hidden',n!==name);
   });
   if(name==='live') refreshLive();
   if(name==='hist') loadHist();
   if(name==='set')  loadSettings();
+  if(name==='about') loadAbout();
 }
 function toggleSw(id){ document.getElementById(id).classList.toggle('on'); }
 function setSw(id,on){ document.getElementById(id).classList.toggle('on',!!on); }
@@ -291,6 +338,7 @@ async function loadState(){
   const r = await api('/api/state');
   if(!r||!r.ok) return;
   S = r;
+  document.getElementById('pillVer').textContent='v'+(r.version||'-');
   const st = r.stats||{};
   document.getElementById('sAcct').textContent = st.account_enabled + ' / ' + st.account_total;
   document.getElementById('sBean').textContent = st.bean_total ?? 0;
@@ -462,6 +510,48 @@ async function testNotify(){
   if(!r||!r.ok) return;
   if(!r.results.length) return toast('没有启用任何推送渠道');
   toast(r.results.map(x=>`${x.channel}:${x.ok?'成功':'失败'}`).join('  '));
+}
+
+
+async function loadAbout(){
+  const r=await api('/api/state');
+  if(!r||!r.ok) return;
+  document.getElementById('abVer').textContent='v'+(r.version||'-');
+  document.getElementById('abDate').textContent='发布于 '+(r.released||'-');
+  document.getElementById('abCore').textContent='v'+(r.core_version||'-');
+  document.getElementById('abImage').textContent=(r.core_version?'':'')+'tianjian518/mcloud-ai-bean';
+  document.getElementById('pillVer').textContent='v'+(r.version||'-');
+  applyChangelog([]);
+  const u=await api('/api/check-update?t=1');
+  if(u&&u.ok&&u.changelog) applyChangelog(u.changelog);
+}
+
+function applyChangelog(list){
+  const el=document.getElementById('abLog');
+  if(!list.length){ el.innerHTML='<div class="empty">暂无记录</div>'; return; }
+  el.innerHTML=list.map(c=>`<div class="notify-box">
+    <h3>v${esc(c.version)}<div class="spacer"></div><span class="pill">${esc(c.date)}</span></h3>
+    <ul style="margin-left:18px;color:var(--txt2);font-size:13px">
+      ${(c.items||[]).map(i=>`<li>${esc(i)}</li>`).join('')}
+    </ul></div>`).join('');
+}
+
+async function checkUpdate(){
+  const el=document.getElementById('abMsg');
+  el.textContent='检查中...'; el.className='pill warn';
+  const r=await api('/api/check-update');
+  if(!r||!r.ok){ el.textContent='检查失败'; el.className='pill'; return; }
+  applyChangelog(r.changelog||[]);
+  if(r.has_update){
+    el.textContent='发现新版本 v'+r.latest; el.className='pill warn';
+    document.getElementById('abUpdate').classList.remove('hidden');
+    document.getElementById('abNewTitle').textContent='🎉 有新版本：v'+r.current+' → v'+r.latest;
+    document.getElementById('abNewDate').textContent='发布于 '+(r.published||'').slice(0,10);
+    document.getElementById('abNotes').textContent=r.notes||'（无更新说明）';
+  }else{
+    el.textContent=r.msg||('已是最新 v'+r.current); el.className='pill ok';
+    document.getElementById('abUpdate').classList.add('hidden');
+  }
 }
 
 document.getElementById('setCron').addEventListener('input',updateCronHint);
