@@ -84,7 +84,7 @@ async def state(request: Request):
         'cron_enabled': settings.get('cron_enabled') == '1',
         'cron_desc': scheduler.describe_cron(settings.get('cron', '')),
         'next_run': next_run.strftime('%Y-%m-%d %H:%M:%S') if next_run else '',
-        'notify_channels': [n for n in settings if False] or notifier.active_channels(),
+        'notify_channels': notifier.active_channels(),
     }
 
 
