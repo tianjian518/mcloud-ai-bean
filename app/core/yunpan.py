@@ -1960,7 +1960,11 @@ class YP:
     def wxsign(self):
         self.sleep()
         url = 'https://caiyun.feixin.10086.cn/market/playoffic/followSignInfo?isWx=true'
-        return_data = self.send_request(url, headers = self.jwtHeaders, cookies = self.cookies).json()
+        resp = self.send_request(url, headers = self.jwtHeaders, cookies = self.cookies)
+        if resp is None:
+            self.log('公众号任务: 接口无响应，跳过')
+            return
+        return_data = resp.json()
 
         if return_data['msg'] != 'success':
             return self.log(return_data['msg'])
@@ -2054,6 +2058,40 @@ class YP:
         else:
             print("-获取游戏信息失败")
 
+    def receive_cloud_once(self):
+        """调用一次领取云朵接口"""
+        return self.request_market_json(f'{self.market_base_url}/ycloud/signin/page/receiveV3',
+                                        params={'client': 'app'},
+                                        headers=self.build_receive_headers())
+
+    def diagnose_receive(self):
+        """领取失败时打印真实 HTTP 状态码，便于定位（如 401/403/405/参数错误）"""
+        url = f'{self.market_base_url}/ycloud/signin/page/receiveV3'
+        headers = self.build_market_headers({
+            'showLoading': 'true',
+            'appVersion': f'{self.client_version}.0',
+            'activityId': 'sign_in_3',
+        }, referer=self.build_market_page_url())
+        try:
+            resp = self.session.get(url, params={'client': 'app'}, headers=headers,
+                                    cookies=dict(self.market_cookies) or None, timeout=20)
+            body = (resp.text or '').replace('\n', ' ')[:200]
+            self.log(f'-领取诊断: HTTP {resp.status_code} {body}')
+        except Exception as e:
+            self.log(f'-领取诊断异常: {e}')
+
+    def recheck_pending(self, pending_amount, total_amount):
+        """重新查询云朵信息，对比出实际领取到的数量"""
+        latest_info_data = self.request_market_json(f'{self.market_base_url}/ycloud/signin/page/infoV3',
+                                                    params={'client': 'app'})
+        latest_result = latest_info_data.get('result', {}) if latest_info_data and latest_info_data.get('code') == 0 else {}
+        latest_pending = latest_result.get('toReceive', pending_amount)
+        latest_total = latest_result.get('total', total_amount)
+        pending_delta = pending_amount - latest_pending if isinstance(pending_amount, int) and isinstance(latest_pending, int) else 0
+        total_delta = latest_total - total_amount if isinstance(total_amount, int) and isinstance(latest_total, int) else 0
+        claimed = total_delta or pending_delta or (pending_amount if latest_pending == 0 else 0)
+        return max(0, claimed), latest_total, latest_pending
+
     @catch_errors
     def receive(self):
         prize_url = f"https://caiyun.feixin.10086.cn/market/prizeApi/checkPrize/getUserPrizeLogPage?currPage=1&pageSize=15&_={self.timestamp}"
@@ -2070,25 +2108,26 @@ class YP:
         total_amount = info_result.get('total', '')
         if pending_amount:
             self.prepare_signin_center_session(for_receive=True)
-            receive_data = self.request_market_json(f'{self.market_base_url}/ycloud/signin/page/receiveV3',
-                                                    params={'client': 'app'},
-                                                    headers=self.build_receive_headers())
-            if not receive_data:
-                self.log('领取云朵失败: 接口无响应')
-                self.log(f'-当前待领取:{pending_amount}云朵')
+            receive_data = self.receive_cloud_once()
+            if receive_data is None:
+                # 接口无响应时先做一次诊断，把真实状态码打进日志，再重试一次
+                self.diagnose_receive()
+                self.sleep(2, 4)
+                receive_data = self.receive_cloud_once()
+            if receive_data is None:
+                claimed, latest_total, latest_pending = self.recheck_pending(pending_amount, total_amount)
+                if claimed > 0:
+                    self.log(f'-领取云朵:{claimed}云朵')
+                    total_amount = latest_total
+                else:
+                    self.log('领取云朵失败: 接口无响应（已重试一次）')
+                    self.log(f'-当前待领取:{pending_amount}云朵')
             elif receive_data.get('code') == 0:
                 receive_result = receive_data.get('result', {})
                 self.log(f'-领取云朵:{receive_result.get("receive", pending_amount)}云朵')
                 total_amount = receive_result.get('total', total_amount)
             else:
-                latest_info_data = self.request_market_json(f'{self.market_base_url}/ycloud/signin/page/infoV3',
-                                                            params={'client': 'app'})
-                latest_result = latest_info_data.get('result', {}) if latest_info_data and latest_info_data.get('code') == 0 else {}
-                latest_pending = latest_result.get('toReceive', pending_amount)
-                latest_total = latest_result.get('total', total_amount)
-                pending_delta = pending_amount - latest_pending if isinstance(pending_amount, int) and isinstance(latest_pending, int) else 0
-                total_delta = latest_total - total_amount if isinstance(total_amount, int) and isinstance(latest_total, int) else 0
-                claimed_amount = total_delta or pending_delta or (pending_amount if latest_pending == 0 else 0)
+                claimed_amount, latest_total, latest_pending = self.recheck_pending(pending_amount, total_amount)
                 if claimed_amount > 0:
                     self.log(f'-领取云朵:{claimed_amount}云朵')
                     total_amount = latest_total
@@ -2199,24 +2238,39 @@ class YP:
         if not token:
             return False
         login_url = f'{RED_PACKET_BASE_URL}/ticket/login'
-        login_headers = {
-            'Content-Type': 'application/json',
-            'User-Agent': ua,
-            'Accept': '*/*',
-            'Host': 'cpactiv.buy.139.com',
-        }
         import requests as _requests
-        try:
-            resp = _requests.post(login_url, headers=login_headers,
-                                  json={'token': token, 'sourceId': RED_PACKET_SOURCE_ID},
-                                  timeout=15)
-            if resp.status_code == 200:
-                login_data = resp.json()
-            else:
-                self.log(f'红包派对登录失败: HTTP {resp.status_code}，请求已记录')
-                return False
-        except Exception as e:
-            self.log(f'红包派对登录异常: {e}')
+
+        def build_headers(user_agent):
+            return {
+                'Content-Type': 'application/json;charset=UTF-8',
+                'User-Agent': user_agent,
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+                'Origin': 'https://cpactiv.buy.139.com',
+                'Referer': RED_PACKET_PAGE_URL,
+                'Host': 'cpactiv.buy.139.com',
+                'x-Requested-With': 'com.chinamobile.mcloud',
+                'Connection': 'keep-alive',
+            }
+
+        login_data = None
+        last_status = 0
+        for attempt, user_agent in enumerate((market_ua, ua), start=1):
+            try:
+                resp = _requests.post(login_url, headers=build_headers(user_agent),
+                                      json={'token': token, 'sourceId': RED_PACKET_SOURCE_ID},
+                                      timeout=15)
+                last_status = resp.status_code
+                if resp.status_code == 200:
+                    login_data = resp.json()
+                    break
+                if attempt == 1:
+                    # 418 多为风控拦截，换 UA 再试一次
+                    self.sleep(2, 4)
+            except Exception as e:
+                self.log(f'红包派对登录异常: {e}')
+        if login_data is None:
+            self.log(f'红包派对登录失败: HTTP {last_status}，请求已记录')
             return False
         if not login_data:
             self.log('红包派对登录失败: 接口无响应')
