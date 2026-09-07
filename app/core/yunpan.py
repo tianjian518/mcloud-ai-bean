@@ -1975,11 +1975,18 @@ class YP:
     def shake(self):
         url = "https://caiyun.feixin.10086.cn:7071/market/shake-server/shake/shakeIt?flag=1"
         successful_shakes = 0
+        aborted = False
 
         try:
             for _ in range(self.click_num):
-                return_data = self.send_request(url = url, cookies = self.cookies, headers = self.jwtHeaders,
-                                                method = 'POST').json()
+                resp = self.send_request(url = url, cookies = self.cookies, headers = self.jwtHeaders,
+                                        method = 'POST')
+                if resp is None:
+                    # 接口连续无响应通常意味着活动已下线，没必要继续空转
+                    self.log('摇一摇: 接口无响应（活动可能已结束），跳过')
+                    aborted = True
+                    break
+                return_data = resp.json()
                 time.sleep(1)
                 shake_prize_config = return_data["result"].get("shakePrizeconfig")
 
@@ -1987,9 +1994,10 @@ class YP:
                     self.log(f"🎉摇一摇获得: {shake_prize_config['name']}")
                     successful_shakes += 1
         except Exception as e:
-            print(f'错误信息: {e}')
-        if successful_shakes == 0:
-            print(f'❌未摇中 x {self.click_num}')
+            self.log(f'摇一摇异常: {e}')
+            aborted = True
+        if successful_shakes == 0 and not aborted:
+            self.log(f'❌未摇中 x {self.click_num}')
 
     @catch_errors
     def surplus_num(self):

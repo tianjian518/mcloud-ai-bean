@@ -6,7 +6,7 @@
 - PATCH：核心脚本修复、问题修正
 """
 
-PANEL_VERSION = '1.2.0'
+PANEL_VERSION = '1.2.1'
 PANEL_RELEASED = '2026-09-07'
 
 REPO = 'tianjian518/mcloud-ai-bean'
@@ -17,6 +17,13 @@ COMMIT_URL = f'https://github.com/{REPO}/commits/main'
 
 # 更新日志：面板会展示最近几条
 CHANGELOG = [
+    {
+        'version': '1.2.1',
+        'date': '2026-09-07',
+        'items': [
+            '摇一摇接口失效时给出明确提示并立即跳出，不再空转 15 次、不再抛 NoneType 异常',
+        ],
+    },
     {
         'version': '1.2.0',
         'date': '2026-09-07',
