@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>移动云盘 AI 豆助手</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --card:#161b22; --line:#262c36;
+  --txt:#e6edf3; --txt2:#8b949e; --accent:#2f81f7; --ok:#3fb950;
+  --warn:#d29922; --err:#f85149; --purple:#a371f7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;padding:8px 16px;font-size:14px;background:var(--accent);color:#fff;transition:.15s}
+button:hover{filter:brightness(1.12)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+button.danger{background:var(--err)}
+button.sm{padding:4px 10px;font-size:12px;border-radius:6px}
+input,select,textarea{background:#0d1117;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px 12px;font-size:14px;font-family:inherit;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.hidden{display:none!important}
+
+/* 登录 */
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100}
+.login-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:36px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login-box h1{font-size:20px;margin-bottom:6px;text-align:center}
+.login-box p{color:var(--txt2);font-size:13px;text-align:center;margin-bottom:22px}
+.login-box label{display:block;font-size:12px;color:var(--txt2);margin:12px 0 6px}
+.login-box button{width:100%;margin-top:20px;padding:10px}
+
+header{border-bottom:1px solid var(--line);background:var(--bg2);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.logo{font-size:17px;font-weight:700;display:flex;align-items:center;gap:9px}
+.logo .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.logo .dot.busy{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.spacer{flex:1}
+.pill{padding:4px 11px;border-radius:999px;font-size:12px;background:#1f2630;color:var(--txt2);border:1px solid var(--line)}
+.pill.ok{color:var(--ok);border-color:#1d4429;background:#12261a}
+.pill.warn{color:var(--warn);border-color:#4a3a12;background:#251d0d}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);background:var(--bg2);padding:0 24px;position:sticky;top:57px;z-index:19;overflow-x:auto}
+.tab{padding:11px 18px;font-size:14px;color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.active{color:var(--txt);border-bottom-color:var(--accent)}
+main{padding:22px 24px 60px;max-width:1280px;margin:0 auto}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card .k{font-size:12px;color:var(--txt2);margin-bottom:8px}
+.card .v{font-size:26px;font-weight:700;line-height:1.2}
+.card .v small{font-size:13px;font-weight:400;color:var(--txt2);margin-left:4px}
+.card.accent .v{color:var(--accent)}
+.card.ok .v{color:var(--ok)}
+.card.purple .v{color:var(--purple)}
+
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px}
+section h2{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+section h2 .sub{font-size:12px;color:var(--txt2);font-weight:400}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--txt2);font-weight:500;font-size:12px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#1c2129}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.switch{width:38px;height:21px;border-radius:999px;background:#30363d;position:relative;cursor:pointer;transition:.2s;display:inline-block;vertical-align:middle}
+.switch.on{background:var(--ok)}
+.switch::after{content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;transition:.2s}
+.switch.on::after{left:20px}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;margin-right:4px}
+.tag.ok{background:#12261a;color:var(--ok)}
+.tag.err{background:#2d1315;color:var(--err)}
+.tag.neutral{background:#1f2630;color:var(--txt2)}
+
+pre.log{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.7;max-height:460px;overflow:auto;white-space:pre-wrap;word-break:break-all;color:#c9d1d9}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--txt2);margin-bottom:6px}
+.field .hint{font-size:11px;color:#6e7681;margin-top:5px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.notify-box{border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;background:#11161d}
+.notify-box h3{font-size:13px;display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.empty{color:var(--txt2);text-align:center;padding:34px;font-size:13px}
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#21262d;border:1px solid var(--line);padding:11px 20px;border-radius:10px;font-size:13px;z-index:200;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+.bar{height:6px;background:#21262d;border-radius:999px;overflow:hidden;margin:10px 0}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));transition:.3s}
+@media(max-width:640px){header{padding:12px 14px}.tabs{padding:0 14px}main{padding:16px 14px 50px}.card .v{font-size:22px}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-box">
+    <h1>☁️ 移动云盘 AI 豆助手</h1>
+    <p>请登录管理面板</p>
+    <label>用户名</label>
+    <input id="lgUser" value="admin" autocomplete="username">
+    <label>密码</label>
+    <input id="lgPass" type="password" autocomplete="current-password" placeholder="默认 admin">
+    <button onclick="doLogin()">登 录</button>
+    <p id="lgErr" style="color:var(--err);margin-top:12px;display:none"></p>
+  </div>
+</div>
+
+<header>
+  <div class="logo"><span class="dot" id="dot"></span>移动云盘 AI 豆助手</div>
+  <span class="pill" id="pillStatus">就绪</span>
+  <span class="pill" id="pillCron">未设置定时</span>
+  <span class="pill" id="pillNext"></span>
+  <div class="spacer"></div>
+  <button class="ghost sm" onclick="loadState()">刷新</button>
+  <button class="sm" id="btnRun" onclick="runAll()">▶ 立即执行</button>
+  <button class="danger sm hidden" id="btnStop" onclick="stopRun()">■ 停止</button>
+  <button class="ghost sm" onclick="doLogout()">退出</button>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-t="dash" onclick="tab('dash')">概览</div>
+  <div class="tab" data-t="acct" onclick="tab('acct')">账号管理</div>
+  <div class="tab" data-t="live" onclick="tab('live')">实时日志</div>
+  <div class="tab" data-t="hist" onclick="tab('hist')">历史记录</div>
+  <div class="tab" data-t="set" onclick="tab('set')">系统设置</div>
+</div>
+
+<main>
+  <!-- 概览 -->
+  <div id="t-dash">
+    <div class="cards">
+      <div class="card accent"><div class="k">账号总数</div><div class="v" id="sAcct">-</div></div>
+      <div class="card ok"><div class="k">AI 豆总余额</div><div class="v" id="sBean">-</div></div>
+      <div class="card purple"><div class="k">今日已领取</div><div class="v" id="sToday">-</div></div>
+      <div class="card"><div class="k">今日执行次数</div><div class="v" id="sRuns">-</div></div>
+      <div class="card"><div class="k">最近执行</div><div class="v" style="font-size:15px;font-weight:500" id="sLast">-</div></div>
+    </div>
+
+    <section>
+      <h2>☁️ 运行中 <span class="sub" id="runInfo"></span></h2>
+      <div class="bar"><i id="runBar" style="width:0"></i></div>
+      <pre class="log" id="dashLog" style="max-height:300px">暂无运行记录，点击右上角「立即执行」开始。</pre>
+    </section>
+
+    <section>
+      <h2>📋 账号速览</h2>
+      <div id="dashAcct"></div>
+    </section>
+  </div>
+
+  <!-- 账号管理 -->
+  <div id="t-acct" class="hidden">
+    <section>
+      <h2>➕ 添加账号</h2>
+      <div class="field">
+        <label>账号内容（格式：Authorization值#手机号，多个账号用 & 或换行分隔）</label>
+        <textarea id="newCookie" placeholder="Basic YWJj...#13800138000&#10;Basic ZGVm...#13900139000"></textarea>
+        <div class="hint">抓包 authTokenRefresh.do 请求头中的 Authorization 值，加 # 和手机号。重复账号会自动跳过。</div>
+      </div>
+      <div class="row"><button onclick="addAccounts()">添加</button><button class="ghost" onclick="document.getElementById('newCookie').value=''">清空</button></div>
+    </section>
+
+    <section>
+      <h2>👥 账号列表 <span class="sub" id="acctCount"></span></h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>ID</th><th>账号</th><th>备注</th><th>状态</th><th>今日签到</th><th>AI 豆余额</th><th>上次执行</th><th>启用</th><th>操作</th></tr></thead>
+        <tbody id="acctBody"></tbody>
+      </table></div>
+      <div class="empty hidden" id="acctEmpty">还没有账号，先在上面添加一个吧</div>
+    </section>
+  </div>
+
+  <!-- 实时日志 -->
+  <div id="t-live" class="hidden">
+    <section>
+      <h2>📺 实时日志
+        <span class="sub" id="liveInfo"></span>
+        <div class="spacer"></div>
+        <button class="ghost sm" onclick="clearLive()">清空</button>
+        <button class="sm" id="btnRun2" onclick="runAll()">▶ 立即执行</button>
+      </h2>
+      <pre class="log" id="liveLog" style="max-height:65vh">等待任务...</pre>
+    </section>
+  </div>
+
+  <!-- 历史 -->
+  <div id="t-hist" class="hidden">
+    <section>
+      <h2>🗂 历史记录</h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>时间</th><th>账号</th><th>结果</th><th>签到</th><th>余额</th><th>本次获得</th><th>触发</th><th>日志</th></tr></thead>
+        <tbody id="histBody"></tbody>
+      </table></div>
+      <div class="empty hidden" id="histEmpty">暂无记录</div>
+    </section>
+  </div>
+
+  <!-- 设置 -->
+  <div id="t-set" class="hidden">
+    <section>
+      <h2>⏰ 定时任务</h2>
+      <div class="grid2">
+        <div class="field"><label>Cron 表达式（分 时 日 月 周）</label>
+          <input id="setCron" placeholder="0 8,16,20 * * *"><div class="hint" id="cronHint"></div></div>
+        <div class="field"><label>执行间隔（秒）</label>
+          <div class="row"><input id="setGapMin" style="width:80px" placeholder="1"> ~ <input id="setGapMax" style="width:80px" placeholder="3"></div>
+          <div class="hint">账号之间的随机等待区间，避免频率过高</div></div>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <span>启用定时</span><div class="switch" id="swCron" onclick="toggleSw('swCron')"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>🔔 消息推送
+        <div class="spacer"></div>
+        <span>总开关</span><div class="switch" id="swNotify" onclick="toggleSw('swNotify')"></div>
+      </h2>
+      <div class="row" style="margin-bottom:14px">
+        <span style="font-size:13px;color:var(--txt2)">仅在有账号失败时推送</span>
+        <div class="switch" id="swFailOnly" onclick="toggleSw('swFailOnly')"></div>
+      </div>
+      <div id="notifyList"></div>
+    </section>
+
+    <section>
+      <h2>🔐 面板安全</h2>
+      <div class="grid2">
+        <div class="field"><label>用户名</label><input id="setUser"></div>
+        <div class="field"><label>密码</label><input id="setPass" type="text"></div>
+      </div>
+      <div class="hint">修改后需要重新登录，建议部署后第一时间改掉默认的 admin/admin</div>
+    </section>
+
+    <div class="row">
+      <button onclick="saveSettings()">保存设置</button>
+      <button class="ghost" onclick="testNotify()">发送测试通知</button>
+      <span class="pill" id="setInfo"></span>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let S = {};           // 全局状态
+let CUR = 'dash';
+let _timer = null;
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2400);
+}
+async function api(url,opt){
+  try{
+    const r = await fetch(url,opt);
+    if(r.status===401){ showLogin(); return null; }
+    return await r.json();
+  }catch(e){ toast('请求失败: '+e.message); return null; }
+}
+function showLogin(){
+  document.getElementById('login').classList.remove('hidden');
+}
+function tab(name){
+  CUR=name;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.t===name));
+  ['dash','acct','live','hist','set'].forEach(n=>{
+    document.getElementById('t-'+n).classList.toggle('hidden',n!==name);
+  });
+  if(name==='live') refreshLive();
+  if(name==='hist') loadHist();
+  if(name==='set')  loadSettings();
+}
+function toggleSw(id){ document.getElementById(id).classList.toggle('on'); }
+function setSw(id,on){ document.getElementById(id).classList.toggle('on',!!on); }
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function doLogin(){
+  const r = await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:document.getElementById('lgUser').value,
+                         password:document.getElementById('lgPass').value})});
+  if(r && r.ok){ document.getElementById('login').classList.add('hidden'); loadState(); }
+  else { const e=document.getElementById('lgErr'); e.textContent=(r&&r.msg)||'登录失败'; e.style.display='block'; }
+}
+async function doLogout(){ await api('/api/logout',{method:'POST'}); showLogin(); }
+
+async function loadState(){
+  const r = await api('/api/state');
+  if(!r||!r.ok) return;
+  S = r;
+  const st = r.stats||{};
+  document.getElementById('sAcct').textContent = st.account_enabled + ' / ' + st.account_total;
+  document.getElementById('sBean').textContent = st.bean_total ?? 0;
+  document.getElementById('sToday').textContent = '+' + (st.bean_today ?? 0);
+  document.getElementById('sRuns').textContent = st.run_today ?? 0;
+  document.getElementById('sLast').textContent = st.last_run || '从未执行';
+
+  const run = r.running||{};
+  const busy = !!run.running;
+  document.getElementById('dot').classList.toggle('busy',busy);
+  document.getElementById('pillStatus').textContent = busy?('执行中 '+run.done+'/'+run.total):'就绪';
+  document.getElementById('pillStatus').className = 'pill '+(busy?'warn':'ok');
+  document.getElementById('btnRun').classList.toggle('hidden',busy);
+  document.getElementById('btnRun2').classList.toggle('hidden',busy);
+  document.getElementById('btnStop').classList.toggle('hidden',!busy);
+  document.getElementById('pillCron').textContent = r.cron_enabled?('定时 '+r.cron_desc):'定时已关闭';
+  document.getElementById('pillNext').textContent = r.next_run?('下次 '+r.next_run):'';
+
+  const pct = run.total? Math.round(run.done/run.total*100):0;
+  document.getElementById('runBar').style.width = pct+'%';
+  document.getElementById('runInfo').textContent = busy? (run.done+'/'+run.total+'  当前: '+(run.current||'')):'';
+
+  renderAccounts(r.accounts||[]);
+  renderDashAccounts(r.accounts||[]);
+  renderHist(r.runs||[]);
+  if(CUR==='live') refreshLive();
+}
+
+function renderDashAccounts(list){
+  const el=document.getElementById('dashAcct');
+  if(!list.length){ el.innerHTML='<div class="empty">暂无账号</div>'; return; }
+  el.innerHTML='<div style="overflow-x:auto"><table><thead><tr><th>账号</th><th>状态</th><th>签到</th><th>AI 豆余额</th><th>上次执行</th></tr></thead><tbody>'
+    + list.map(a=>{
+      const ok = a.last_ok;
+      return `<tr><td class="mono">${esc(a.phone?mask(a.phone):('ID '+a.id))}</td>
+      <td><span class="tag ${ok?'ok':'err'}">${ok?'正常':'异常/未跑'}</span></td>
+      <td>${a.last_signin?'<span class="tag ok">已签到</span>':'<span class="tag neutral">-</span>'}</td>
+      <td>${a.cloud_total||0}</td><td>${esc(a.last_run||'-')}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+function mask(p){ return p&&p.length>=11 ? p.slice(0,3)+'****'+p.slice(-4) : (p||'-'); }
+
+function renderAccounts(list){
+  const el=document.getElementById('acctBody');
+  document.getElementById('acctCount').textContent='共 '+list.length+' 个';
+  document.getElementById('acctEmpty').classList.toggle('hidden',list.length>0);
+  el.innerHTML = list.map(a=>`<tr>
+    <td>${a.id}</td>
+    <td class="mono">${esc(mask(a.phone))}</td>
+    <td><input value="${esc(a.remark||'')}" onchange="setRemark(${a.id},this.value)" placeholder="备注" style="padding:4px 8px;font-size:12px"></td>
+    <td><span class="tag ${a.last_ok?'ok':'err'}">${a.last_ok?'正常':'异常/未跑'}</span></td>
+    <td>${a.last_signin?'<span class="tag ok">已签到</span>':'<span class="tag neutral">未签到</span>'}</td>
+    <td>${a.cloud_total||0}</td>
+    <td class="mono" style="font-size:12px">${esc(a.last_run||'-')}</td>
+    <td><div class="switch ${a.enabled?'on':''}" onclick="toggleAcc(${a.id})"></div></td>
+    <td><button class="sm" onclick="runOne(${a.id})">执行</button>
+        <button class="ghost sm" onclick="delAcc(${a.id})">删除</button></td></tr>`).join('');
+}
+
+function renderHist(list){
+  const el=document.getElementById('histBody');
+  document.getElementById('histEmpty').classList.toggle('hidden',list.length>0);
+  el.innerHTML = list.map(r=>`<tr>
+    <td class="mono" style="font-size:12px">${esc(r.started_at||'')}</td>
+    <td class="mono">${esc(r.phone||'-')}</td>
+    <td>${r.ok?'<span class="tag ok">成功</span>':'<span class="tag err">失败</span>'}</td>
+    <td>${r.signin?'<span class="tag ok">已签到</span>':'<span class="tag neutral">-</span>'}</td>
+    <td>${r.cloud_total||0}</td>
+    <td style="color:var(--ok)">+${r.cloud_received||0}</td>
+    <td><span class="tag neutral">${r.trigger==='cron'?'定时':'手动'}</span></td>
+    <td><button class="ghost sm" onclick="viewLog(${r.id})">查看</button></td></tr>`).join('');
+}
+
+async function addAccounts(){
+  const v=document.getElementById('newCookie').value.trim();
+  if(!v) return toast('请填写账号内容');
+  const r=await api('/api/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie:v})});
+  if(r&&r.ok){ toast(`添加成功 ${r.added} 个，跳过 ${r.skipped} 个`); document.getElementById('newCookie').value=''; loadState(); }
+}
+async function delAcc(id){ if(!confirm('确认删除该账号？')) return;
+  await api('/api/accounts/'+id,{method:'DELETE'}); loadState(); }
+async function toggleAcc(id){ await api('/api/accounts/'+id+'/toggle',{method:'POST'}); loadState(); }
+async function setRemark(id,v){ await api('/api/accounts/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({remark:v})}); }
+async function runAll(){
+  const r=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+  if(r&&r.ok){ toast('已启动 '+r.count+' 个账号'); tab('live'); loadState(); }
+}
+async function runOne(id){
+  const r=await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[id]})});
+  if(r&&r.ok){ toast('已启动'); tab('live'); loadState(); }
+}
+async function stopRun(){ await api('/api/run/stop',{method:'POST'}); toast('正在停止...'); }
+
+async function refreshLive(){
+  const r=await api('/api/run/live');
+  if(!r||!r.ok) return;
+  const s=r.state;
+  const el=document.getElementById('liveLog');
+  el.textContent = s.log || '等待任务...';
+  el.scrollTop = el.scrollHeight;
+  document.getElementById('dashLog').textContent = s.log || '暂无运行记录，点击右上角「立即执行」开始。';
+  document.getElementById('liveInfo').textContent = s.running?(`${s.done}/${s.total}  ${s.current||''}`):'';
+}
+async function clearLive(){ await api('/api/run/live',{method:'DELETE'}); refreshLive(); }
+
+async function loadHist(){
+  const r=await api('/api/logs?limit=200');
+  if(r&&r.ok) renderHist(r.items||[]);
+}
+async function viewLog(id){
+  const r=await api('/api/log/'+id);
+  if(r&&r.ok){
+    const w=window.open('','_blank','width=760,height=600');
+    w.document.write('<pre style="font:13px/1.7 monospace;padding:16px;white-space:pre-wrap">'+esc(r.item.log||'（无日志）')+'</pre>');
+  }
+}
+
+let FIELDS=[];
+async function loadSettings(){
+  const r=await api('/api/settings');
+  if(!r||!r.ok) return;
+  const s=r.settings||{}; FIELDS=r.fields||[];
+  document.getElementById('setCron').value=s.cron||'';
+  document.getElementById('setGapMin').value=s.gap_min||1;
+  document.getElementById('setGapMax').value=s.gap_max||3;
+  document.getElementById('setUser').value=s.panel_user||'';
+  document.getElementById('setPass').value='';
+  setSw('swCron',s.cron_enabled==='1');
+  setSw('swNotify',s.notify_enabled==='1');
+  setSw('swFailOnly',s.notify_on_failure_only==='1');
+  updateCronHint();
+  document.getElementById('notifyList').innerHTML = FIELDS.map(([name,label,fields])=>`
+    <div class="notify-box">
+      <h3>${label}<div class="spacer"></div><div class="switch ${s['notify_'+name+'_enabled']==='1'?'on':''}" id="sw_${name}" onclick="toggleSw('sw_${name}')"></div></h3>
+      ${fields.map(f=>`<div class="field" style="margin-bottom:8px"><label>${f}</label>
+        <input id="nf_${name}_${f}" value="${esc(s['notify_'+name+'_'+f]||'')}" placeholder="${esc(f)}"></div>`).join('')}
+    </div>`).join('');
+}
+function updateCronHint(){
+  const v=document.getElementById('setCron').value.trim();
+  const p=v.split(/\s+/).filter(Boolean);
+  let tip='';
+  if(p.length===5) tip='每天 '+p[1]+':'+String(p[0]).padStart(2,'0')+' 执行（多个时间用逗号，如 0 8,16,20 * * *）';
+  else if(p.length===6) tip='检测到 6 段写法，会自动忽略秒';
+  else if(v) tip='⚠️ 需要 5 段：分 时 日 月 周';
+  document.getElementById('cronHint').textContent=tip;
+}
+async function saveSettings(){
+  const data={
+    cron:document.getElementById('setCron').value.trim(),
+    cron_enabled:document.getElementById('swCron').classList.contains('on')?1:0,
+    notify_enabled:document.getElementById('swNotify').classList.contains('on')?1:0,
+    notify_on_failure_only:document.getElementById('swFailOnly').classList.contains('on')?1:0,
+    gap_min:document.getElementById('setGapMin').value.trim()||1,
+    gap_max:document.getElementById('setGapMax').value.trim()||3,
+    panel_user:document.getElementById('setUser').value.trim(),
+  };
+  const pass=document.getElementById('setPass').value.trim();
+  if(pass) data.panel_pass=pass;
+  FIELDS.forEach(([name,label,fields])=>{
+    data['notify_'+name+'_enabled']=document.getElementById('sw_'+name).classList.contains('on')?1:0;
+    fields.forEach(f=>{ const el=document.getElementById('nf_'+name+'_'+f); if(el) data['notify_'+name+'_'+f]=el.value.trim(); });
+  });
+  const r=await api('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  if(r&&r.ok){ document.getElementById('setInfo').textContent='已保存'+(r.next_run?'，下次 '+r.next_run:''); toast('设置已保存'); loadState(); }
+}
+async function testNotify(){
+  const r=await api('/api/notify/test',{method:'POST'});
+  if(!r||!r.ok) return;
+  if(!r.results.length) return toast('没有启用任何推送渠道');
+  toast(r.results.map(x=>`${x.channel}:${x.ok?'成功':'失败'}`).join('  '));
+}
+
+document.getElementById('setCron').addEventListener('input',updateCronHint);
+document.getElementById('lgPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+document.getElementById('lgUser').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
+// 启动：先探测是否需要登录
+(async function(){
+  const r=await api('/api/state');
+  if(r&&r.ok){ document.getElementById('login').classList.add('hidden'); loadState(); }
+  else showLogin();
+  setInterval(()=>{ if(document.getElementById('login').classList.contains('hidden')) loadState(); }, 8000);
+  setInterval(()=>{ if(CUR==='live') refreshLive(); }, 2000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+services:
+  mcloud:
+    image: tianjian518/mcloud-ai-bean:latest
+    container_name: mcloud-ai-bean
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      TZ: Asia/Shanghai
+      # 首次启动后可在面板里改，这里只作为初始值
+      MCLD_PANEL_USER: admin
+      MCLD_PANEL_PASS: admin
+      # 可选：预置账号，多个用 & 分隔（Authorization#手机号）
+      # MCLD_COOKIES: "Basic xxxx#13800138000&Basic yyyy#13900139000"
+    volumes:
+      - ./data:/data
